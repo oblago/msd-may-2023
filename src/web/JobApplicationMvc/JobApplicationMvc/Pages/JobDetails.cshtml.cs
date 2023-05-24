@@ -1,3 +1,4 @@
+using DotNetCore.CAP;
 using JobApplicationMvc.Areas.Identity.Data;
 using JobApplicationMvc.Data;
 using Microsoft.AspNetCore.Identity;
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using DomainEvents = MessageContracts.WebMessages;
 
 namespace JobApplicationMvc.Pages
 {
@@ -13,11 +15,12 @@ namespace JobApplicationMvc.Pages
     {
         private readonly JobApplicationsDataContext _context;
         private readonly UserManager<JobApplicationMvcUser> _userManager;
-
-        public JobDetailsModel(JobApplicationsDataContext context, UserManager<JobApplicationMvcUser> userManager)
+        private ICapPublisher _publisher;
+        public JobDetailsModel(JobApplicationsDataContext context, UserManager<JobApplicationMvcUser> userManager, ICapPublisher publisher)
         {
             _context = context;
             _userManager = userManager;
+            _publisher = publisher;
         }
 
         [BindProperty]
@@ -50,12 +53,37 @@ namespace JobApplicationMvc.Pages
             }
         }
 
-        public async Task<IActionResult> OnPostAsync()
+        public async Task<IActionResult> OnPostAsync(int id)
         {
-            
-            return RedirectToPage("/myapplications");
-        }
+            var userId = User.Claims.SingleOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value!;
+            UserId = userId;
+            var email = User?.Identity?.Name;
+            Applicant = await _userManager.FindByIdAsync(userId);
 
+
+
+            var opening = await _context.JobOpenings
+            .Where(o => o.Id == id)
+            .SingleOrDefaultAsync();
+            if (opening is null)
+            {
+                Message = "Uh Oh! That Opening Doesn't Exist or has been filled!";
+            }
+            else
+            {
+                Job = opening;
+                ApplicationModel.JobId = Job.OpeningId.ToString();
+                ApplicationModel.UserId = Applicant.Id;
+            }
+
+            var eventToPublish = new DomainEvents.JobApplicationCreated
+            {
+                ApplicantId = UserId,
+                JobOfferingId = opening.OpeningId.ToString()
+            };
+            await _publisher.PublishAsync(DomainEvents.JobApplicationCreated.MessageId, eventToPublish);
+            return RedirectToPage("Index");
+        }
 
     }
 }

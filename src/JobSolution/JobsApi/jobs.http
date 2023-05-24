@@ -10,6 +10,6 @@ POST http://localhost:1337/jobs
 Content-Type: application/json
 
 {
-  "title": "IT Manager",
+  "title": "Information Technlogy FTW!! Manager",
   "description": "Manages Stuff"
 }
